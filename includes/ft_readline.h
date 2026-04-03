@@ -34,8 +34,9 @@ int		ft_read(hist **current);
 //double linked list
 
 hist	*new_node(void);
-void	delete_node(hist *node);
+void	delete_node(hist **head, hist **tail, hist *node);
 void	delete_hist(hist **head);
+void	move_to_last(hist **head, hist **tail, hist *node);
 void	static_infos(hist **head, bool mode);
 bool	hist_add_back(hist **head, hist **tail, hist *new);
 bool	hist_add_front(hist **head, hist **tail, hist *new);

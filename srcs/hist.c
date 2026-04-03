@@ -72,7 +72,27 @@ bool	hist_add_front(hist **head, hist **tail, hist *new)
 	return 1;
 }
 
-void	delete_node(hist *node)
+void	move_to_last(hist **head, hist **tail, hist *node)
+{
+	if (node == *tail)
+		return ;
+	if (node == (*head))
+	{
+		(*head) = node->next;
+		(*head)->prev = NULL;
+	}
+	else
+	{
+		node->prev->next = node->next;
+		node->next->prev = node->prev;
+	}
+	(*tail)->next = node;
+	node->prev = (*tail);
+	node->next = NULL;
+	(*tail) = node;
+}
+
+void	delete_node(hist **head, hist **tail, hist *node)
 {
 	if (node->buffer)
 	{
@@ -88,10 +108,21 @@ void	delete_node(hist *node)
 			next->prev = prev;
 		}
 		else
+		{
 			prev->next = NULL;
+			(*tail) = prev;
+		}
 	}
 	else if (next)
+	{
 		next->prev = NULL;
+		(*head) = next;
+	}
+	else
+	{
+		(*head) = NULL;
+		(*tail) = NULL;
+	}
 	free(node);
 	node = NULL;
 }

@@ -11,6 +11,12 @@ void	free_all(void)
 	static_infos(NULL, 0);
 }
 
+void	adjust_history(hist **head, hist **tail, hist *current)
+{
+	delete_node(head, tail, *tail);
+	move_to_last(head, tail, current);
+}
+
 char	*ft_readline(char *display)
 {
 	struct termios	new1, old;
@@ -38,18 +44,31 @@ char	*ft_readline(char *display)
 	if (val == -1)
 		return NULL;
 	reset_and_go(&old);
-	return (current->buffer);
+	if (current != history_tail)
+		adjust_history(&history_head, &history_tail, current);
+	else if (history_tail->prev && !strcmp(history_tail->buffer, history_tail->prev->buffer))
+	{
+		delete_node(&history_head, &history_tail, history_tail);
+		current = history_tail;
+	}
+	if (!strlen(current->buffer))
+	{
+		delete_node(&history_head, &history_tail, history_tail);
+		return strdup("");
+	}
+	return (strdup(current->buffer));
 }
 
 int main(void)
 {
 	char *str = NULL;
-	int a = 3;
+	int a = 10;
 	while (a--)
 	{
 		str = ft_readline("coucou$> ");
 		if (str[0])
 			printf("%s\n", str);
+		free(str);
 	}
 	return 0;
 }
