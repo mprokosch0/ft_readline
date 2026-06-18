@@ -1,128 +1,122 @@
 #include "ft_readline.h"
 
-void	static_infos(hist **head, bool mode)
+void	load_history(hist *history)
 {
-	static hist **shead = NULL;
-
-	if (mode)
-	{
-		shead = head;
+	history->fd = open(".ft_readline_history", O_CREAT | O_RDWR, 0644);
+	if (history->fd < 0)
 		return ;
-	}
-	if (*shead)
-		delete_hist(shead);
-}
-
-hist *new_node(void)
-{
-	hist	*new = calloc(sizeof(hist), 1);
-	if (!new)
-		return NULL;
-	new->buffer = calloc(SIZE, 1);
-	if (!new->buffer)
+	char *line = NULL;
+	while ((line = get_next_line(history->fd)) != NULL)
 	{
-		free(new);
-		return NULL;
-	}
-	new->size = SIZE;
-	new->prev = NULL;
-	new->next = NULL;
-	return new;
-}
-
-void	delete_hist(hist **head)
-{
-	while ((*head))
-	{
-		hist *tmp = (*head);
-		(*head) = (*head)->next;
-		if (tmp->buffer)
-			free(tmp->buffer);
-		free(tmp);
-	}
-}
-
-bool	hist_add_back(hist **head, hist **tail, hist *new)
-{
-	if (!new)
-		return 0;
-	if (!(*head))
-		(*head) = (*tail) = new;
-	else
-	{	
-		(*tail)->next = new;
-		new->prev = (*tail);
-		(*tail) = new;
-	}
-	return 1;
-}
-
-bool	hist_add_front(hist **head, hist **tail, hist *new)
-{
-	if (!new)
-		return 0;
-	if (!(*head))
-		(*head) = (*tail) = new;
-	else
-	{
-		(*head)->prev = new;
-		new->next = (*head);
-		(*head) = new;
-	}
-	return 1;
-}
-
-void	move_to_last(hist **head, hist **tail, hist *node)
-{
-	if (node == *tail)
-		return ;
-	if (node == (*head))
-	{
-		(*head) = node->next;
-		(*head)->prev = NULL;
-	}
-	else
-	{
-		node->prev->next = node->next;
-		node->next->prev = node->prev;
-	}
-	(*tail)->next = node;
-	node->prev = (*tail);
-	node->next = NULL;
-	(*tail) = node;
-}
-
-void	delete_node(hist **head, hist **tail, hist *node)
-{
-	if (node->buffer)
-	{
-		free(node->buffer);
-		node->buffer = NULL;
-	}
-	hist *prev = node->prev, *next = node->next;
-	if (prev)
-	{
-		if (next)
+		if (history->pos >= HIST_SIZE - 1)
 		{
-			prev->next = next;
-			next->prev = prev;
+			free(history->entries[0]);
+			memmove(&history->entries[0], &history->entries[1], history->pos - 1);
 		}
-		else
-		{
-			prev->next = NULL;
-			(*tail) = prev;
-		}
+		history->entries[history->pos] = line;
+		history->entries_sizes[history->pos] = strlen(line);
+		if (history->entries[history->pos][history->entries_sizes[history->pos] - 1] == '\n')
+			history->entries[history->pos][history->entries_sizes[history->pos] - 1] = '\0';
+		if (history->pos < HIST_SIZE - 1)
+			history->pos++;
+		history->size++;
 	}
-	else if (next)
+	if (history->pos < HIST_SIZE - 1)
+		history->pos--;
+	history->pos_in_file = history->pos;
+	history->curr_entry = calloc(4096, sizeof(char));
+	history->curr_entry_size = 4096;
+}
+
+void	load_prev_part_history(hist *history)
+{
+	lseek(history->fd, 0, SEEK_SET);
+	skip_lines(history->fd, history->pos_in_file - HIST_SIZE);
+
+	for (size_t i = 0; i < HIST_SIZE; i++)
 	{
-		next->prev = NULL;
-		(*head) = next;
+		free(history->entries[i]);
+		history->entries[i] = get_next_line(history->fd);
+	}
+	history->pos = HIST_SIZE - 1;
+}
+
+void	load_next_part_history(hist *history)
+{
+	lseek(history->fd, 0, SEEK_SET);
+	skip_lines(history->fd, history->pos_in_file + 1 + HIST_SIZE);
+
+	for (size_t i = 0; i < HIST_SIZE; i++)
+	{
+		free(history->entries[i]);
+		history->entries[i] = get_next_line(history->fd);
+	}
+	history->pos = 0;
+}
+
+static int	get_offset(hist *history, off_t *line_start, off_t *line_end)
+{
+	size_t  i;
+    off_t   pos;
+
+    i = 0;
+    pos = 0;
+	lseek(history->fd, 0, SEEK_SET);
+    while (i < history->size)
+    {
+		skip_lines(history->fd, 1);
+		off_t next_pos = lseek(history->fd, 0, SEEK_CUR);
+        if (i == history->pos_in_file)
+        {
+			*line_start = pos;
+			*line_end = next_pos;
+            return true;
+        }
+        pos = next_pos;
+        i++;
+    }
+	return false;
+}
+
+void	paste_history(hist *history)
+{
+	if (history->on_curr)
+	{
+		lseek(history->fd, 0, SEEK_END);
+		write(history->fd, "\n", 1);
+		write(history->fd, history->curr_entry, strlen(history->curr_entry));
 	}
 	else
 	{
-		(*head) = NULL;
-		(*tail) = NULL;
+		off_t line_start = 0, line_end = 0;
+		if (!get_offset(history, &line_start, &line_end))
+			return ;
+		struct stat st;
+		if (fstat(history->fd, &st) < 0 || st.st_size == 0)
+			return ;
+		char *map = mmap(NULL, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, history->fd, 0);
+		if (map == MAP_FAILED)
+			return ;
+		memmove(map + line_start, map + line_end, st.st_size - line_end);
+		msync(map, st.st_size, MS_SYNC);
+		munmap(map, st.st_size);
+		ftruncate(history->fd, line_start + st.st_size - line_end);
+		lseek(history->fd, 0, SEEK_END);
+		write(history->fd, "\n", 1);
+		write(history->fd, history->entries[history->pos], strlen(history->entries[history->pos]));
 	}
-	free(node);
-	node = NULL;
+}
+
+void	free_history(hist *history)
+{
+	paste_history(history);
+	for (size_t i = 0; i < HIST_SIZE; i++)
+	{
+		if (history->entries[i])
+			free(history->entries[i]);
+	}
+	if (history->curr_entry)
+			free(history->curr_entry);
+	if (history->fd >= 0)
+		close(history->fd);
 }

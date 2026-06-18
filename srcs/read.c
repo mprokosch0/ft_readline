@@ -36,7 +36,7 @@ void	move_right(size_t *pos, size_t *len)
 	}
 }
 
-void	change_history(hist **current, size_t *pos, size_t *len)
+void	change_history(hist *history, size_t *pos, size_t *len)
 {
 	while (*pos < *len)
 	{
@@ -48,27 +48,42 @@ void	change_history(hist **current, size_t *pos, size_t *len)
 		write(0, "\b \b", 3);
 		(*pos)--;
 	}
-	size_t newLen = strlen((*current)->buffer);
-	write(0, (*current)->buffer, newLen);
+	char *buffer = (history->on_curr) ? history->curr_entry : history->entries[history->pos];
+	size_t newLen = strlen(buffer);
+	write(0, buffer, newLen);
 	*len = newLen;
 	*pos = *len;
 }
 
-void	which_key(char seq[6], hist **current, size_t *pos, size_t *len)
+void	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
 {
 	if (!strcmp(seq, UP_ARR))
 	{
-		if (!(*current)->prev)
+		if (history->pos_in_file == 0)
 			return ;
-		(*current) = (*current)->prev;
-		change_history(current, pos, len);
+		if (!history->pos)
+			load_prev_part_history(history);
+		if (history->on_curr)
+			history->on_curr = false;
+		else
+		{
+			history->pos--;
+			history->pos_in_file--;
+		}
+		change_history(history, pos, len);
 	}
 	else if (!strcmp(seq, DOWN_ARR))
 	{
-		if (!(*current)->next)
-			return ;
-		(*current) = (*current)->next;
-		change_history(current, pos, len);
+		if (!history->on_curr && (history->pos_in_file >= history->size - 1 || !history->entries[history->pos + 1]))
+			history->on_curr = true;
+		else if (history->pos + 1 >= HIST_SIZE)
+			load_next_part_history(history);
+		if (!history->on_curr)
+		{
+			history->pos++;
+			history->pos_in_file++;
+		}
+		change_history(history, pos, len);
 	}
 	else if (!strcmp(seq, RIGHT_ARR))	
 		move_right(pos, len);
@@ -80,19 +95,17 @@ void	which_key(char seq[6], hist **current, size_t *pos, size_t *len)
 		end_toggle(pos, len);
 }
 
-void	delete_char(hist **current, size_t *pos, size_t *len)
+void	delete_char(char **buffer, size_t *pos, size_t *len)
 {
 	size_t	j;
-	hist	*tmp;
 
-	tmp = *current;
 	if ((*pos) > 0)
 	{
-		memmove(&tmp->buffer[(*pos) - 1], &tmp->buffer[(*pos)], (*len) - (*pos) + 1);
+		memmove(&(*buffer)[(*pos) - 1], &(*buffer)[(*pos)], (*len) - (*pos) + 1);
 		(*len)--;
 		(*pos)--;
 		write(0, "\033[D \033[D", 7);
-		write(0, &tmp->buffer[(*pos)], strlen(&tmp->buffer[(*pos)]));
+		write(0, &(*buffer)[(*pos)], strlen(&(*buffer)[(*pos)]));
 		write(0, " \033[D", 4);
 		j = (*pos);
 		while (j < (*len))
@@ -103,22 +116,21 @@ void	delete_char(hist **current, size_t *pos, size_t *len)
 	}
 }
 
-void	print_char(char c, hist **current, size_t *pos, size_t *len)
+void	print_char(char c, char **buffer, size_t *size, size_t *pos, size_t *len)
 {
 	size_t	j;
-	hist	*tmp;
 
-	tmp = *current;
-	if (*len == tmp->size -1)
+	if (*len == *size -1)
 	{
-		tmp->buffer = realloc(tmp->buffer, tmp->size * 2);
-		if (!tmp->buffer)
+		char *tmp = realloc(*buffer, *size * 2);
+		if (!tmp)
 			return ;
-		tmp->size = tmp->size * 2;
+		*buffer = tmp;
+		*size = *size * 2;
 	}
-	memmove(&tmp->buffer[(*pos) + 1], &tmp->buffer[(*pos)], (*len) - (*pos) + 1);
-	tmp->buffer[(*pos)] = c;
-	write(0, &tmp->buffer[(*pos)], strlen(&tmp->buffer[(*pos)]));
+	memmove(&(*buffer)[(*pos) + 1], &(*buffer)[(*pos)], (*len) - (*pos) + 1);
+	(*buffer)[(*pos)] = c;
+	write(0, &(*buffer)[(*pos)], strlen(&(*buffer)[(*pos)]));
 	j = (*pos);
 	while (j < (*len))
 	{
@@ -129,7 +141,7 @@ void	print_char(char c, hist **current, size_t *pos, size_t *len)
 	(*pos)++;
 }
 
-void	verif_seq(char seq[6], hist **current, size_t *pos, size_t *len)
+void	verif_seq(char seq[6], hist *history, size_t *pos, size_t *len)
 {
 	read(0, &seq[1], 1);
 	if (seq[1] == '[')
@@ -141,11 +153,11 @@ void	verif_seq(char seq[6], hist **current, size_t *pos, size_t *len)
 			;//which_key2(seq[5], current, pos, len);
 		}
 		else
-			which_key(seq, current, pos, len);
+			which_key(seq, history, pos, len);
 	}
 }
 
-int		ft_read(hist **current)
+int		ft_read(hist *history)
 {
 	size_t	pos = 0;
 	size_t	len = 0;
@@ -153,17 +165,19 @@ int		ft_read(hist **current)
 
 	while (1)
 	{
+		char	**buffer = (history->on_curr) ? &history->curr_entry : &history->entries[history->pos];
+		size_t	*size = (history->on_curr) ? &history->curr_entry_size : &history->entries_sizes[history->pos];
 		int val = read(0, &seq, 1);
 		if (val <= 0)
 			return -1;
 		if (seq[0] == '\n')
 			return 0;
 		if (seq[0] == 127)
-			delete_char(current, &pos, &len);
+			delete_char(buffer, &pos, &len);
 		if (seq[0] == '\033')
-			verif_seq(seq, current, &pos, &len);
+			verif_seq(seq, history, &pos, &len);
 		if (isPrint(seq[0]))
-			print_char(seq[0], current, &pos, &len);
+			print_char(seq[0], buffer, size, &pos, &len);
 	}
 	return 0;
 }

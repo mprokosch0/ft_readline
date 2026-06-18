@@ -7,8 +7,15 @@
 # include <unistd.h>
 # include <stdlib.h>
 # include <stdbool.h>
+# include <sys/stat.h>
+# include <sys/mman.h>
+# include <fcntl.h>
 
-# define SIZE 4096 
+# define HIST_SIZE 25
+
+# ifndef BUFFER_SIZE
+#  define BUFFER_SIZE 100
+# endif
 
 # define isPrint(c) (c >= 32 && c <= 126)
 
@@ -21,25 +28,35 @@
 
 typedef struct hist
 {
-	char		*buffer;
+	size_t		entries_sizes[HIST_SIZE];
+	char		*entries[HIST_SIZE];
+	char		*curr_entry;
+	size_t		curr_entry_size;
+	size_t		pos;
+	size_t		pos_in_file;
 	size_t		size;
-	struct hist	*next;
-	struct hist	*prev;
+	int			fd;
+	int			on_curr;
 }hist;
 
 
+// utils
+
+char	*get_next_line(int fd);
+char	*ft_strjoin(char const *s1, char const *s2);
+void	skip_lines(int fd, size_t nb_lines);
+
 //read
-int		ft_read(hist **current);
 
-//double linked list
+int		ft_read(hist *current);
 
-hist	*new_node(void);
-void	delete_node(hist **head, hist **tail, hist *node);
-void	delete_hist(hist **head);
-void	move_to_last(hist **head, hist **tail, hist *node);
-void	static_infos(hist **head, bool mode);
-bool	hist_add_back(hist **head, hist **tail, hist *new);
-bool	hist_add_front(hist **head, hist **tail, hist *new);
+// history
+
+void	load_history(hist *history);
+void	load_prev_part_history(hist *history);
+void	load_next_part_history(hist *history);
+void	free_history(hist *history);
+
 
 void	init_termios(struct termios *new1, struct termios *old);
 void	reset_termios(struct termios *old);

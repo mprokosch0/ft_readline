@@ -3,7 +3,12 @@ NAME = readline
 CC = cc
 FLAGS = -Wall -Wextra -Werror -Iincludes -g
 
-P1 = srcs/main.c srcs/manage_term.c srcs/hist.c srcs/read.c
+P1 =	srcs/main.c \
+		srcs/manage_term.c \
+		srcs/hist.c \
+		srcs/read.c \
+		srcs/get_next_line.c \
+		srcs/utils.c
 
 OBJS = $(P1:.c=.o)
 
