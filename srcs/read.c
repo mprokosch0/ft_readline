@@ -61,12 +61,12 @@ void	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
 	{
 		if (history->pos_in_file == 0)
 			return ;
-		if (!history->pos)
-			load_prev_part_history(history);
 		if (history->on_curr)
 			history->on_curr = false;
 		else
 		{
+			if (!history->pos)
+				load_prev_part_history(history);
 			history->pos--;
 			history->pos_in_file--;
 		}
@@ -76,10 +76,10 @@ void	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
 	{
 		if (!history->on_curr && (history->pos_in_file >= history->size - 1 || !history->entries[history->pos + 1]))
 			history->on_curr = true;
-		else if (history->pos + 1 >= HIST_SIZE)
-			load_next_part_history(history);
 		if (!history->on_curr)
 		{
+			if (history->pos + 1 >= HIST_SIZE)
+				load_next_part_history(history);
 			history->pos++;
 			history->pos_in_file++;
 		}

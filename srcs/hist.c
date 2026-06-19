@@ -8,22 +8,24 @@ void	load_history(hist *history)
 	char *line = NULL;
 	while ((line = get_next_line(history->fd)) != NULL)
 	{
-		if (history->pos >= HIST_SIZE - 1)
+		if (history->pos >= HIST_SIZE)
 		{
-			free(history->entries[0]);
-			memmove(&history->entries[0], &history->entries[1], history->pos - 1);
+			if (history->entries[0])
+				free(history->entries[0]);
+			memmove(&history->entries[0], &history->entries[1], (HIST_SIZE - 1) * sizeof(char *));
+			memmove(&history->entries_sizes[0], &history->entries_sizes[1], (HIST_SIZE - 1) * sizeof(size_t));
+			history->pos--;
 		}
 		history->entries[history->pos] = line;
 		history->entries_sizes[history->pos] = strlen(line);
 		if (history->entries[history->pos][history->entries_sizes[history->pos] - 1] == '\n')
 			history->entries[history->pos][history->entries_sizes[history->pos] - 1] = '\0';
-		if (history->pos < HIST_SIZE - 1)
-			history->pos++;
+		history->pos++;
 		history->size++;
 	}
-	if (history->pos < HIST_SIZE - 1)
+	if (history->pos > 0)
 		history->pos--;
-	history->pos_in_file = history->pos;
+	history->pos_in_file = history->size - 1;
 	history->curr_entry = calloc(4096, sizeof(char));
 	history->curr_entry_size = 4096;
 }
@@ -31,27 +33,54 @@ void	load_history(hist *history)
 void	load_prev_part_history(hist *history)
 {
 	lseek(history->fd, 0, SEEK_SET);
-	skip_lines(history->fd, history->pos_in_file - HIST_SIZE);
+	int diff = history->pos_in_file - HIST_SIZE;
+	if (diff < 0)
+		diff = 0;
+	skip_lines(history->fd, diff);
 
 	for (size_t i = 0; i < HIST_SIZE; i++)
 	{
-		free(history->entries[i]);
+		if (history->entries[i])
+			free(history->entries[i]);
 		history->entries[i] = get_next_line(history->fd);
+		history->entries_sizes[i] = strlen(history->entries[i]);
+		if (history->entries[i][history->entries_sizes[i] - 1] == '\n')
+			history->entries[i][history->entries_sizes[i] - 1] = '\0';
 	}
-	history->pos = HIST_SIZE - 1;
+	get_next_line(-1);
+	if (!diff)
+		history->pos = history->pos_in_file;
+	else
+		history->pos = HIST_SIZE;
 }
 
 void	load_next_part_history(hist *history)
 {
 	lseek(history->fd, 0, SEEK_SET);
-	skip_lines(history->fd, history->pos_in_file + 1 + HIST_SIZE);
+	skip_lines(history->fd, history->pos_in_file + 1);
 
-	for (size_t i = 0; i < HIST_SIZE; i++)
+	size_t max = (history->size - (history->pos_in_file + 1));
+	if (max > HIST_SIZE)
+		max = HIST_SIZE;
+
+	for (size_t i = 0; i < max; i++)
 	{
 		free(history->entries[i]);
 		history->entries[i] = get_next_line(history->fd);
+		history->entries_sizes[i] = strlen(history->entries[i]);
+		if (history->entries[i][history->entries_sizes[i] - 1] == '\n')
+			history->entries[i][history->entries_sizes[i] - 1] = '\0';
 	}
-	history->pos = 0;
+	for (size_t i = max; i < HIST_SIZE; i++)
+	{
+		if (history->entries[i])
+		{
+			free(history->entries[i]);
+			history->entries[i] = NULL;
+		}
+	}
+	get_next_line(-1);
+	history->pos = -1;
 }
 
 static int	get_offset(hist *history, off_t *line_start, off_t *line_end)
@@ -82,8 +111,8 @@ void	paste_history(hist *history)
 {
 	if (history->on_curr)
 	{
-		lseek(history->fd, 0, SEEK_END);
-		write(history->fd, "\n", 1);
+		if (lseek(history->fd, 0, SEEK_END) != 0)
+			write(history->fd, "\n", 1);
 		write(history->fd, history->curr_entry, strlen(history->curr_entry));
 	}
 	else

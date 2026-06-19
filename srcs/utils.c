@@ -32,11 +32,11 @@ char	*ft_strjoin(char const *s1, char const *s2)
 
 void	skip_lines(int fd, size_t nb_lines)
 {
-
 	for (size_t i = 0; i < nb_lines; i++)
 	{
 		char c = 1;
 		while (c != '\n')
-			read(fd, &c, 1);
+			if (read(fd, &c, 1) <= 0)
+				return ;
 	}
 }

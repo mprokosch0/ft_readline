@@ -10,7 +10,8 @@ static void	reset_and_go(struct termios *old)
 char	*ft_readline(char *display)
 {
 	struct termios	new1, old;
-	hist			history = {.entries = {NULL}, .entries_sizes = {0}, .curr_entry = NULL, .curr_entry_size = 0, .pos = 0, .pos_in_file = 0, .size = 0, .fd = 0, .on_curr = true};
+	hist			history = {.entries = {NULL}, .entries_sizes = {0}, .curr_entry = NULL, .curr_entry_size = 0,
+								.pos = 0, .pos_in_file = 0, .size = 0, .fd = 0, .on_curr = true};
 	char			*res = NULL;
 
 	load_history(&history);
