@@ -55,18 +55,18 @@ void	change_history(hist *history, size_t *pos, size_t *len)
 	*pos = *len;
 }
 
-void	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
+bool	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
 {
 	if (!strcmp(seq, UP_ARR))
 	{
 		if (history->pos_in_file == 0)
-			return ;
+			return true;
 		if (history->on_curr)
 			history->on_curr = false;
 		else
 		{
-			if (!history->pos)
-				load_prev_part_history(history);
+			if (!history->pos && !load_prev_part_history(history))
+				return false;
 			history->pos--;
 			history->pos_in_file--;
 		}
@@ -78,8 +78,8 @@ void	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
 			history->on_curr = true;
 		if (!history->on_curr)
 		{
-			if (history->pos + 1 >= HIST_SIZE)
-				load_next_part_history(history);
+			if (history->pos + 1 >= HIST_SIZE && !load_next_part_history(history))
+				return false;
 			history->pos++;
 			history->pos_in_file++;
 		}
@@ -93,6 +93,7 @@ void	which_key(char seq[6], hist *history, size_t *pos, size_t *len)
 		home_toggle(pos);
 	else if (!strcmp(seq, END))	
 		end_toggle(pos, len);
+	return true;
 }
 
 void	delete_char(char **buffer, size_t *pos, size_t *len)
@@ -116,7 +117,7 @@ void	delete_char(char **buffer, size_t *pos, size_t *len)
 	}
 }
 
-void	print_char(char c, char **buffer, size_t *size, size_t *pos, size_t *len)
+bool	print_char(char c, char **buffer, size_t *size, size_t *pos, size_t *len)
 {
 	size_t	j;
 
@@ -124,7 +125,7 @@ void	print_char(char c, char **buffer, size_t *size, size_t *pos, size_t *len)
 	{
 		char *tmp = realloc(*buffer, *size * 2);
 		if (!tmp)
-			return ;
+			return false;
 		*buffer = tmp;
 		*size = *size * 2;
 	}
@@ -139,22 +140,28 @@ void	print_char(char c, char **buffer, size_t *size, size_t *pos, size_t *len)
 	}
 	(*len)++;
 	(*pos)++;
+	return true;
 }
 
-void	verif_seq(char seq[6], hist *history, size_t *pos, size_t *len)
+bool	verif_seq(char seq[6], hist *history, size_t *pos, size_t *len)
 {
-	read(0, &seq[1], 1);
+	if (read(0, &seq[1], 1) < 0)
+		return false;
 	if (seq[1] == '[')
 	{
-		read(0, &seq[2], 1);
+		if (read(0, &seq[2], 1) < 0)
+			return false;
 		if (seq[2] == '1')
 		{
-			read(0, &seq[3], 3);
+			if (read(0, &seq[3], 3) < 0)
+				return false;
 			;//which_key2(seq[5], current, pos, len);
 		}
-		else
-			which_key(seq, history, pos, len);
+		else if (!which_key(seq, history, pos, len))
+			return false;
+			
 	}
+	return true;
 }
 
 int		ft_read(hist *history)
@@ -175,9 +182,11 @@ int		ft_read(hist *history)
 		if (seq[0] == 127)
 			delete_char(buffer, &pos, &len);
 		if (seq[0] == '\033')
-			verif_seq(seq, history, &pos, &len);
+			if (!verif_seq(seq, history, &pos, &len))
+				return -1;
 		if (isPrint(seq[0]))
-			print_char(seq[0], buffer, size, &pos, &len);
+			if (!print_char(seq[0], buffer, size, &pos, &len))
+				return -1;
 	}
 	return 0;
 }

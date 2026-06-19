@@ -1,11 +1,13 @@
 #include "ft_readline.h"
 
-void	load_history(hist *history)
+bool	load_history(hist *history)
 {
 	history->fd = open(".ft_readline_history", O_CREAT | O_RDWR, 0644);
 	if (history->fd < 0)
-		return ;
+		return false;
 	char *line = NULL;
+	off_t end = lseek(history->fd, 0, SEEK_END);
+	lseek(history->fd, 0, SEEK_SET);
 	while ((line = get_next_line(history->fd)) != NULL)
 	{
 		if (history->pos >= HIST_SIZE)
@@ -23,14 +25,18 @@ void	load_history(hist *history)
 		history->pos++;
 		history->size++;
 	}
+	off_t stop = lseek(history->fd, 0, SEEK_CUR);
+	if (stop != end)
+		return false;
 	if (history->pos > 0)
 		history->pos--;
 	history->pos_in_file = history->size - 1;
 	history->curr_entry = calloc(4096, sizeof(char));
 	history->curr_entry_size = 4096;
+	return true;
 }
 
-void	load_prev_part_history(hist *history)
+bool	load_prev_part_history(hist *history)
 {
 	lseek(history->fd, 0, SEEK_SET);
 	int diff = history->pos_in_file - HIST_SIZE;
@@ -43,6 +49,11 @@ void	load_prev_part_history(hist *history)
 		if (history->entries[i])
 			free(history->entries[i]);
 		history->entries[i] = get_next_line(history->fd);
+		if (!history->entries[i])
+		{
+			get_next_line(-1);
+			return false;
+		}
 		history->entries_sizes[i] = strlen(history->entries[i]);
 		if (history->entries[i][history->entries_sizes[i] - 1] == '\n')
 			history->entries[i][history->entries_sizes[i] - 1] = '\0';
@@ -52,9 +63,10 @@ void	load_prev_part_history(hist *history)
 		history->pos = history->pos_in_file;
 	else
 		history->pos = HIST_SIZE;
+	return true;
 }
 
-void	load_next_part_history(hist *history)
+bool	load_next_part_history(hist *history)
 {
 	lseek(history->fd, 0, SEEK_SET);
 	skip_lines(history->fd, history->pos_in_file + 1);
@@ -67,6 +79,11 @@ void	load_next_part_history(hist *history)
 	{
 		free(history->entries[i]);
 		history->entries[i] = get_next_line(history->fd);
+		if (!history->entries[i])
+		{
+			get_next_line(-1);
+			return false;
+		}
 		history->entries_sizes[i] = strlen(history->entries[i]);
 		if (history->entries[i][history->entries_sizes[i] - 1] == '\n')
 			history->entries[i][history->entries_sizes[i] - 1] = '\0';
@@ -81,6 +98,7 @@ void	load_next_part_history(hist *history)
 	}
 	get_next_line(-1);
 	history->pos = -1;
+	return true;
 }
 
 static int	get_offset(hist *history, off_t *line_start, off_t *line_end)
@@ -136,9 +154,10 @@ void	paste_history(hist *history)
 	}
 }
 
-void	free_history(hist *history)
+void	free_history(hist *history, bool flag)
 {
-	paste_history(history);
+	if (!flag)
+		paste_history(history);
 	for (size_t i = 0; i < HIST_SIZE; i++)
 	{
 		if (history->entries[i])

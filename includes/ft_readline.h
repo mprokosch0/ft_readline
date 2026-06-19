@@ -52,10 +52,10 @@ int		ft_read(hist *current);
 
 // history
 
-void	load_history(hist *history);
-void	load_prev_part_history(hist *history);
-void	load_next_part_history(hist *history);
-void	free_history(hist *history);
+bool	load_history(hist *history);
+bool	load_prev_part_history(hist *history);
+bool	load_next_part_history(hist *history);
+void	free_history(hist *history, bool flag);
 
 
 void	init_termios(struct termios *new1, struct termios *old);
